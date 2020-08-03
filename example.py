@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 import os
-import zipstream
 import zipfile
 
+import zipstream
 
 with zipstream.ZipFile(mode='w', compression=zipstream.ZIP_DEFLATED) as z:
     z.write('LICENSE')
