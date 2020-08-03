@@ -75,7 +75,7 @@ archives.
 ## Installation
 
 ```
-pip install zipstream-new
+pip install zipstream-new-2
 ```
 
 ## Requirements

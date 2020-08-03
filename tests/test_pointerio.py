@@ -2,6 +2,7 @@
 from __future__ import unicode_literals
 
 import unittest
+
 import zipstream
 
 
@@ -46,7 +47,6 @@ class PointerIOTestCase(unittest.TestCase):
             self.fail(err)
         self.assertEqual(fileobj.tell(), 19)
 
-
         fileobj = zipstream.PointerIO()
         data = '幋 儳鑤 寱懤擨 拻敁柧'
         try:
@@ -75,6 +75,7 @@ class PointerIOTestCase(unittest.TestCase):
         fileobj = zipstream.PointerIO()
         data = 1.00
         self.assertRaises(TypeError, fileobj.write, data)
+
 
 if __name__ == '__main__':
     unittest.main()

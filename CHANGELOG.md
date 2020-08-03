@@ -10,3 +10,6 @@ This file details the changes that were made after forking v1.1.4 from https://g
 
 ## v1.1.7 (2019-10-22)
 * Stream data in the order it was received (https://github.com/arjan-s/python-zipstream/pull/4)
+
+## v1.1.8 (2020-08-03)
+* Add file and directory permissions argument for streamed data (https://github.com/knightmre/python-zipstream/pull/1)

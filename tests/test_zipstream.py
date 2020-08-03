@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
-from __future__ import unicode_literals, print_function
+from __future__ import print_function, unicode_literals
 
 import os
 import tempfile
 import unittest
-import zipstream
 import zipfile
 
+import zipstream
 
 SAMPLE_FILE_RTF = 'tests/sample.rtf'
 
@@ -59,6 +59,7 @@ class ZipStreamTestCase(unittest.TestCase):
 
     def test_write_iterable(self):
         z = zipstream.ZipFile(mode='w')
+
         def string_generator():
             for _ in range(10):
                 yield b'zipstream\x01\n'
@@ -110,7 +111,7 @@ class ZipStreamTestCase(unittest.TestCase):
 
         for chunk in z:
             f.write(chunk)
-        
+
         f.close()
         z2 = zipfile.ZipFile(f.name, 'r')
         self.assertFalse(z2.testzip())
@@ -120,6 +121,7 @@ class ZipStreamTestCase(unittest.TestCase):
     def test_write_iterable_no_archive(self):
         z = zipstream.ZipFile(mode='w')
         self.assertRaises(TypeError, z.write_iter, iterable=range(10))
+
 
 if __name__ == '__main__':
     unittest.main()
