@@ -1,19 +1,18 @@
 # -*- coding: utf-8 -*-
-from setuptools import setup, find_packages
-
+from setuptools import find_packages, setup
 
 with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setup(
-    name='zipstream-new',
-    version='1.1.7',
+    name='zipstream-new-2',
+    version='1.1.8',
     description='Zipfile generator that takes input files as well as streams',
     long_description=long_description,
     long_description_content_type="text/markdown",
-    author='arjan5',
-    author_email='arjan@anymore.nl',
-    url='https://github.com/arjan-s/python-zipstream',
+    author='knightmre',
+    author_email='stephane.meng@dell.com',
+    url='https://github.com/knightmre/python-zipstream.git',
     packages=find_packages(exclude=['tests']),
     keywords='zip streaming',
     test_suite='nose.collector',

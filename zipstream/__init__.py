@@ -4,31 +4,26 @@ Iterable ZIP archive generator.
 
 Derived directly from zipfile.py
 """
-from __future__ import unicode_literals, print_function, with_statement
+from __future__ import print_function, unicode_literals, with_statement
+
+import os
+import stat
+import struct
+import sys
+import time
+import zipfile
+from zipfile import (ZIP64_LIMIT, ZIP_DEFLATED, ZIP_FILECOUNT_LIMIT,
+                     ZIP_MAX_COMMENT, ZIP_STORED, crc32, stringCentralDir,
+                     stringEndArchive, stringEndArchive64,
+                     stringEndArchive64Locator, stringFileHeader,
+                     structCentralDir, structEndArchive, structEndArchive64,
+                     structEndArchive64Locator, structFileHeader, zlib)
+
+from .compat import (BZIP2_VERSION, LZMA_VERSION, SEEK_CUR, SEEK_END, SEEK_SET,
+                     ZIP64_VERSION, ZIP_BZIP2, ZIP_LZMA, bytes, str)
 
 __version__ = '1.1.4'
 
-import os
-import sys
-import stat
-import struct
-import time
-import zipfile
-
-from .compat import (
-    str, bytes,
-    ZIP64_VERSION,
-    ZIP_BZIP2, BZIP2_VERSION,
-    ZIP_LZMA, LZMA_VERSION,
-    SEEK_SET, SEEK_CUR, SEEK_END)
-
-from zipfile import (
-    ZIP_STORED, ZIP64_LIMIT, ZIP_FILECOUNT_LIMIT, ZIP_MAX_COMMENT,
-    ZIP_DEFLATED,
-    structCentralDir, structEndArchive64, structEndArchive, structEndArchive64Locator,
-    stringCentralDir, stringEndArchive64, stringEndArchive, stringEndArchive64Locator,
-    structFileHeader, stringFileHeader,
-    zlib, crc32)
 
 stringDataDescriptor = b'PK\x07\x08'  # magic number for data descriptor
 
@@ -126,7 +121,7 @@ class ZipInfo(zipfile.ZipInfo):
         if zip64:
             fmt = b'<HHQQ'
             extra = extra + struct.pack(fmt,
-                    1, struct.calcsize(fmt)-4, file_size, compress_size)
+                                        1, struct.calcsize(fmt)-4, file_size, compress_size)
         if file_size > ZIP64_LIMIT or compress_size > ZIP64_LIMIT:
             if not zip64:
                 raise LargeZipFile("Filesize would require ZIP64 extensions")
@@ -145,10 +140,10 @@ class ZipInfo(zipfile.ZipInfo):
         self.create_version = max(min_version, self.create_version)
         filename, flag_bits = self._encodeFilenameFlags()
         header = struct.pack(structFileHeader, stringFileHeader,
-                 self.extract_version, self.reserved, flag_bits,
-                 self.compress_type, dostime, dosdate, CRC,
-                 compress_size, file_size,
-                 len(filename), len(extra))
+                             self.extract_version, self.reserved, flag_bits,
+                             self.compress_type, dostime, dosdate, CRC,
+                             compress_size, file_size,
+                             len(filename), len(extra))
         return header + filename + extra
 
     def DataDescriptor(self):
@@ -208,7 +203,7 @@ class ZipFile(zipfile.ZipFile):
         if len(comment) >= ZIP_MAX_COMMENT:
             if self.debug:
                 print('Archive comment is too long; truncating to %d bytes'
-                        % ZIP_MAX_COMMENT)
+                      % ZIP_MAX_COMMENT)
             comment = comment[:ZIP_MAX_COMMENT]
         self._comment = comment
         self._didModify = True
@@ -220,25 +215,26 @@ class ZipFile(zipfile.ZipFile):
         kwargs = {'filename': filename, 'arcname': arcname, 'compress_type': compress_type}
         self.paths_to_write.append(kwargs)
 
-    def write_iter(self, arcname, iterable, compress_type=None, buffer_size=None):
+    def write_iter(self, arcname, iterable, compress_type=None, buffer_size=None, filemode=600, dirmode=600):
         """Write the bytes iterable `iterable` to the archive under the name `arcname`."""
-        kwargs = {'arcname': arcname, 'iterable': iterable, 'compress_type': compress_type, 'buffer_size': buffer_size}
+        kwargs = {'arcname': arcname, 'iterable': iterable, 'compress_type': compress_type, 'buffer_size': buffer_size,
+                  'filemode': filemode, 'dirmode': dirmode}
         self.paths_to_write.append(kwargs)
 
-    def writestr(self, arcname, data, compress_type=None, buffer_size=None):
+    def writestr(self, arcname, data, compress_type=None, buffer_size=None, filemode=600, dirmode=600):
         """
         Writes a str into ZipFile by wrapping data as a generator
         """
         def _iterable():
             yield data
-        return self.write_iter(arcname, _iterable(), compress_type=compress_type, buffer_size=buffer_size)
+        return self.write_iter(arcname, _iterable(), compress_type=compress_type, buffer_size=buffer_size, filemode=filemode, dirmode=dirmode)
 
-    def __write(self, filename=None, iterable=None, arcname=None, compress_type=None, buffer_size=None):
+    def __write(self, filename=None, iterable=None, arcname=None, compress_type=None, buffer_size=None, filemode=600, dirmode=600):
         """Put the bytes from filename into the archive under the name
         `arcname`."""
         if not self.fp:
             raise RuntimeError(
-                  "Attempt to write to ZIP archive that was already closed")
+                "Attempt to write to ZIP archive that was already closed")
         if (filename is None and iterable is None) or (filename is not None and iterable is not None):
             raise ValueError("either (exclusively) filename or iterable shall be not None")
 
@@ -252,6 +248,8 @@ class ZipFile(zipfile.ZipFile):
         # Create ZipInfo instance to store file information
         if arcname is None:
             arcname = filename
+        if arcname[-1] == '/':
+            isdir = True
         arcname = os.path.normpath(os.path.splitdrive(arcname)[1])
         while arcname[0] in (os.sep, os.altsep):
             arcname = arcname[1:]
@@ -261,7 +259,13 @@ class ZipFile(zipfile.ZipFile):
         if st:
             zinfo.external_attr = (st[0] & 0xFFFF) << 16      # Unix attributes
         else:
-            zinfo.external_attr = 0o600 << 16     # ?rw-------
+            mode = int('100' + str(filemode), 8)
+            dir_mode = int('40' + str(dirmode), 8)
+            if isdir:
+                zinfo.external_attr = dir_mode << 16
+            else:
+                zinfo.external_attr = mode << 16
+
         if compress_type is None:
             zinfo.compress_type = self.compression
         else:
@@ -297,7 +301,7 @@ class ZipFile(zipfile.ZipFile):
         zinfo.compress_size = compress_size = 0
         # Compressed size can be larger than uncompressed size
         zip64 = self._allowZip64 and \
-                zinfo.file_size * 1.05 > ZIP64_LIMIT
+            zinfo.file_size * 1.05 > ZIP64_LIMIT
         yield self.fp.write(zinfo.FileHeader(zip64))
         file_size = 0
         if filename:
@@ -312,7 +316,7 @@ class ZipFile(zipfile.ZipFile):
                         buf = cmpr.compress(buf)
                         compress_size = compress_size + len(buf)
                     yield self.fp.write(buf)
-        else: # we have an iterable
+        else:  # we have an iterable
             for buf in iterable:
                 file_size = file_size + len(buf)
                 CRC = crc32(buf, CRC) & 0xffffffff
@@ -382,8 +386,8 @@ class ZipFile(zipfile.ZipFile):
                     if extra:
                         # Append a ZIP64 field to the extra's
                         extra_data = struct.pack(
-                                b'<HH' + b'Q'*len(extra),
-                                1, 8*len(extra), *extra) + extra_data
+                            b'<HH' + b'Q'*len(extra),
+                            1, 8*len(extra), *extra) + extra_data
                         min_version = ZIP64_VERSION
 
                     if zinfo.compress_type == ZIP_BZIP2:
@@ -396,21 +400,21 @@ class ZipFile(zipfile.ZipFile):
                     try:
                         filename, flag_bits = zinfo._encodeFilenameFlags()
                         centdir = struct.pack(structCentralDir,
-                            stringCentralDir, create_version,
-                            zinfo.create_system, extract_version, zinfo.reserved,
-                            flag_bits, zinfo.compress_type, dostime, dosdate,
-                            zinfo.CRC, compress_size, file_size,
-                            len(filename), len(extra_data), len(zinfo.comment),
-                            0, zinfo.internal_attr, zinfo.external_attr,
-                            header_offset)
+                                              stringCentralDir, create_version,
+                                              zinfo.create_system, extract_version, zinfo.reserved,
+                                              flag_bits, zinfo.compress_type, dostime, dosdate,
+                                              zinfo.CRC, compress_size, file_size,
+                                              len(filename), len(extra_data), len(zinfo.comment),
+                                              0, zinfo.internal_attr, zinfo.external_attr,
+                                              header_offset)
                     except DeprecationWarning:
                         print((structCentralDir, stringCentralDir, create_version,
-                            zinfo.create_system, extract_version, zinfo.reserved,
-                            zinfo.flag_bits, zinfo.compress_type, dostime, dosdate,
-                            zinfo.CRC, compress_size, file_size,
-                            len(zinfo.filename), len(extra_data), len(zinfo.comment),
-                            0, zinfo.internal_attr, zinfo.external_attr,
-                            header_offset), file=sys.stderr)
+                               zinfo.create_system, extract_version, zinfo.reserved,
+                               zinfo.flag_bits, zinfo.compress_type, dostime, dosdate,
+                               zinfo.CRC, compress_size, file_size,
+                               len(zinfo.filename), len(extra_data), len(zinfo.comment),
+                               0, zinfo.internal_attr, zinfo.external_attr,
+                               header_offset), file=sys.stderr)
                         raise
                     yield self.fp.write(centdir)
                     yield self.fp.write(filename)
@@ -424,25 +428,25 @@ class ZipFile(zipfile.ZipFile):
                 centDirOffset = pos1
                 if (centDirCount >= ZIP_FILECOUNT_LIMIT or
                     centDirOffset > ZIP64_LIMIT or
-                    centDirSize > ZIP64_LIMIT):
+                        centDirSize > ZIP64_LIMIT):
                     # Need to write the ZIP64 end-of-archive records
                     zip64endrec = struct.pack(
-                            structEndArchive64, stringEndArchive64,
-                            44, 45, 45, 0, 0, centDirCount, centDirCount,
-                            centDirSize, centDirOffset)
+                        structEndArchive64, stringEndArchive64,
+                        44, 45, 45, 0, 0, centDirCount, centDirCount,
+                        centDirSize, centDirOffset)
                     yield self.fp.write(zip64endrec)
 
                     zip64locrec = struct.pack(
-                            structEndArchive64Locator,
-                            stringEndArchive64Locator, 0, pos2, 1)
+                        structEndArchive64Locator,
+                        stringEndArchive64Locator, 0, pos2, 1)
                     yield self.fp.write(zip64locrec)
                     centDirCount = min(centDirCount, 0xFFFF)
                     centDirSize = min(centDirSize, 0xFFFFFFFF)
                     centDirOffset = min(centDirOffset, 0xFFFFFFFF)
 
                 endrec = struct.pack(structEndArchive, stringEndArchive,
-                                    0, 0, centDirCount, centDirCount,
-                                    centDirSize, centDirOffset, len(self._comment))
+                                     0, 0, centDirCount, centDirCount,
+                                     centDirSize, centDirOffset, len(self._comment))
                 yield self.fp.write(endrec)
                 yield self.fp.write(self._comment)
                 self.fp.flush()
